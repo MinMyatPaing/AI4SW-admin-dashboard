@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function Input({ title, field, value, type, onChange }) {
+export default function Input({ title, field, value, type, onChange, defaultValue }) {
   return (
     <div className="flex-1">
       <label htmlFor={field} className="block font-medium mb-1">
@@ -23,6 +23,7 @@ export default function Input({ title, field, value, type, onChange }) {
           className="border border-gray-300 rounded-md px-3 py-2 w-full"
           value={value}
           onChange={onChange}
+          defaultValue={defaultValue}
         />
       )}
     </div>

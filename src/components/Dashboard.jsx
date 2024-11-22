@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { functions, httpsCallable } from "../firebase.config.js";
 
 import { ClipLoader } from "react-spinners";
@@ -7,15 +7,18 @@ import DailyTaskCharts from "./TablesAndCharts/DailyTaskCharts.jsx";
 import HeartRateChartDateRange from "./TablesAndCharts/HeartRateChartDateRange.jsx";
 import Input from "./CustomUI/Input.jsx";
 import SwitchButton from "./CustomUI/SwitchButton.jsx";
-import HeartRateChartByHour from "./TablesAndCharts/HeartRateChartByHour.jsx";
+import HeartRateChartInterval from "./TablesAndCharts/HeartRateChartInterval.jsx";
 
 const Dashboard = () => {
+  // Initial state and form setup
   const [isDateFilter, setIsDateFilter] = useState(true);
 
   const initialForm = !isDateFilter
     ? {
         email: "",
         date: "",
+        startHour: "00:00",
+        endHour: "23:59",
         taskType: "DailyMood",
       }
     : {
@@ -32,13 +35,37 @@ const Dashboard = () => {
   const [heartRateSamplesDateFilter, setHeartRateSamplesDateFilter] = useState(
     []
   );
-  const [heartRateSamplesHourlyFilter, setHeartRateSamplesHourlyFilter] =
-    useState({});
+  const [heartRateSamplesIntervals, setHeartRateSamplesIntervals] = useState(
+    {}
+  );
   const [showTable, setShowTable] = useState(false);
   const [showHeartRateChart, setShowHeartRateChart] = useState(false);
 
   const [isFetchingHeartRate, setIsFetchingHeartRate] = useState(false);
   const [isFetchingTasks, setIsFetchingTasks] = useState(false);
+
+  // Add useEffect to reset form when switching between date and hourly filters
+  useEffect(() => {
+    setFormDetails(
+      !isDateFilter
+        ? {
+            email: "",
+            date: "",
+            startHour: "00:00",
+            endHour: "23:59",
+            taskType: "DailyMood",
+          }
+        : {
+            email: "",
+            startDate: "",
+            endDate: "",
+            taskType: "DailyMood",
+          }
+    );
+    setShowTable(false);
+    setShowHeartRateChart(false);
+    setError(null);
+  }, [isDateFilter]);
 
   // Task Fetch
 
@@ -78,54 +105,81 @@ const Dashboard = () => {
       setError(null); // Clear any previous errors
     } catch (error) {
       console.error("Error fetching task IDs:", error);
-      setError(error.message === 'not-found' ? 'Invalid Email' : "An unexpected error occurred");
+      setError(
+        error.message === "not-found"
+          ? "Invalid Email"
+          : "An unexpected error occurred"
+      );
     } finally {
       setIsFetchingTasks(false);
     }
   };
 
-  // HOURLY HEART RATE ////
-  const formatHourlyHeartRateChartData = () => {
+  // Format 15-minute interval data for chart
+  const formatIntervalHeartRateChartData = () => {
     const data = [];
-    for (let hour = 0; hour < 24; hour++) {
-      const hourlyAverage = heartRateSamplesHourlyFilter[hour] || "0.00";
-      data.push({
-        hour: `${hour} ${Number(hour) >= 12 ? " PM" : " AM"}`,
-        heartRate: parseFloat(hourlyAverage),
-      });
+    const startHour = parseInt(formDetails.startHour);
+    const endHour = parseInt(formDetails.endHour);
+
+    // Generate all possible 15-minute intervals within the time range
+    for (let hour = startHour; hour <= endHour; hour++) {
+      for (let minute = 0; minute < 60; minute += 15) {
+        const timeKey = `${hour.toString().padStart(2, "0")}:${minute
+          .toString()
+          .padStart(2, "0")}`;
+        const heartRate = heartRateSamplesIntervals[timeKey];
+
+        // Only add intervals that have data
+        if (heartRate) {
+          const formattedHour = hour % 12 || 12; // Convert to 12-hour format
+          const amPm = hour >= 12 ? "PM" : "AM";
+          const formattedTime = `${formattedHour}:${minute
+            .toString()
+            .padStart(2, "0")} ${amPm}`;
+
+          data.push({
+            time: formattedTime,
+            heartRate: heartRate,
+          });
+        }
+      }
     }
     return data;
   };
 
-  const fetchHourlyHeartRateSamples = async () => {
-    const getHourlyHeartRateSamples = httpsCallable(
+  // Fetch heart rate data by minutes
+  const fetchHeartRateSamples = async () => {
+    const getHeartRateSamples = httpsCallable(
       functions,
-      "getHourlyHeartRateSamples"
+      "getHeartRateSamplesEveryFifteenMinutes" // Keep the original function name unless changed in Firebase
     );
 
     const targetDate = new Date(formDetails.date);
 
     if (isNaN(targetDate.getTime())) {
-      console.error("Invalid date format");
+      setError(`Invalid date format: ${formDetails.date}`);
       return;
     }
 
-    setIsFetchingHeartRate(true);
+    setShowHeartRateChart(false);
 
     try {
-      const result = await getHourlyHeartRateSamples({
+      setIsFetchingHeartRate(true);
+
+      const result = await getHeartRateSamples({
         email: formDetails.email,
         taskType: formDetails.taskType,
         date: targetDate.toISOString(),
+        startHour: parseInt(formDetails.startHour || "0"),
+        endHour: parseInt(formDetails.endHour || "23"),
       });
 
-      console.log("Fetched Result ====> ", result.data);
-
-      setHeartRateSamplesHourlyFilter(result.data);
+      setHeartRateSamplesIntervals(result.data);
       setShowHeartRateChart(true);
       setIsFetchingHeartRate(false);
     } catch (error) {
-      console.error(error);
+      console.error("Full error object:", error);
+      setError(error.message || "An unexpected error occurred");
       setIsFetchingHeartRate(false);
     }
   };
@@ -157,8 +211,6 @@ const Dashboard = () => {
         endDate: end.toISOString(),
       });
 
-      console.log("Fetched Result ====> ", result.data);
-
       setHeartRateSamplesDateFilter(result.data);
       setShowHeartRateChart(true);
       setIsFetchingHeartRate(false);
@@ -188,7 +240,7 @@ const Dashboard = () => {
             isOn={isDateFilter}
             onChange={() => setIsDateFilter((preState) => !preState)}
             firstLabel={"Date Filter"}
-            secondLabel={"Hourly Filter"}
+            secondLabel={"Minute Interval Filter"}
           />
           <div className="flex gap-3">
             <Input
@@ -216,13 +268,31 @@ const Dashboard = () => {
                 />
               </>
             ) : (
-              <Input
-                field={"date"}
-                title={"Date"}
-                type={"date"}
-                value={formDetails.date}
-                onChange={(e) => updateForm("date", e.target.value)}
-              />
+              <>
+                <div className="flex gap-3 mb-4">
+                  <Input
+                    field={"startHour"}
+                    title={"Start Hour"}
+                    type={"time"}
+                    value={formDetails.startHour}
+                    onChange={(e) => updateForm("startHour", e.target.value)}
+                  />
+                  <Input
+                    field={"endHour"}
+                    title={"End Hour"}
+                    type={"time"}
+                    value={formDetails.endHour}
+                    onChange={(e) => updateForm("endHour", e.target.value)}
+                  />
+                  <Input
+                    field={"date"}
+                    title={"Date"}
+                    type={"date"}
+                    value={formDetails.date}
+                    onChange={(e) => updateForm("date", e.target.value)}
+                  />
+                </div>
+              </>
             )}
             <Input
               field={"taskType"}
@@ -245,7 +315,7 @@ const Dashboard = () => {
               onClick={
                 isDateFilter
                   ? fetchHeartRateSamplesByDateRange
-                  : fetchHourlyHeartRateSamples
+                  : fetchHeartRateSamples
               }
               disabled={isFetchingHeartRate}
               className="bg-blue-500 hover:bg-blue-600 text-white p-3 font-medium rounded-md disabled:bg-gray-500 disabled:cursor-not-allowed"
@@ -297,8 +367,10 @@ const Dashboard = () => {
           )}
 
           {showHeartRateChart && !isFetchingHeartRate && !isDateFilter && (
-            <HeartRateChartByHour
-              formatHourlyHeartRateChartData={formatHourlyHeartRateChartData}
+            <HeartRateChartInterval
+              formatHeartRateChartDataInterval={
+                formatIntervalHeartRateChartData
+              }
             />
           )}
         </div>
