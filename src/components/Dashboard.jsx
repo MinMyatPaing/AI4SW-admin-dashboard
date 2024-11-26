@@ -67,8 +67,7 @@ const Dashboard = () => {
     setError(null);
   }, [isDateFilter]);
 
-  // Task Fetch
-
+  // Function to fetch tasks based on email and date range
   const fetchTaskByEmail = async () => {
     setTasks([]);
     const getTaskIdsByDateRange = httpsCallable(
@@ -78,7 +77,7 @@ const Dashboard = () => {
 
     const start = new Date(formDetails.startDate);
     const end = new Date(formDetails.endDate);
-
+    // Check for valid date format
     if (isNaN(start) || isNaN(end)) {
       setError("Invalid date format");
       return;
@@ -147,7 +146,7 @@ const Dashboard = () => {
     return data;
   };
 
-  // Fetch heart rate data by minutes
+  // Fetch heart rate data based on the selected date and hour range
   const fetchHeartRateSamples = async () => {
     const getHeartRateSamples = httpsCallable(
       functions,
@@ -304,13 +303,13 @@ const Dashboard = () => {
           </div>
 
           <div>
-            <button
+            {isDateFilter && <button
               onClick={fetchTaskByEmail}
               disabled={isFetchingTasks}
               className="bg-blue-500 hover:bg-blue-600 text-white p-3 font-medium rounded-md mr-6 disabled:bg-gray-500 disabled:cursor-not-allowed"
             >
               Search
-            </button>
+            </button>}
             <button
               onClick={
                 isDateFilter
@@ -353,9 +352,9 @@ const Dashboard = () => {
                 endDate={formDetails.endDate}
               />
 
-              {formDetails.taskType === "DailyMood" && (
+              {/* {formDetails.taskType === "DailyMood" && (
                 <DailyTaskCharts tasks={tasks} />
-              )}
+              )} */}
             </div>
           )}
 
